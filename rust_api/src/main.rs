@@ -1,18 +1,13 @@
-use core::arch;
-use std::{
-    os::linux::raw::stat,
-    sync::{Arc, Mutex},
-    vec,
-};
-
 use axum::{
     Json, Router,
     extract::{Path, State},
     http::StatusCode,
-    routing::{get, get_service},
+    routing::get,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
 
+// Estrutura de dados para um usuário
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct User {
     id: u32,
@@ -20,31 +15,35 @@ struct User {
     email: String,
 }
 
+// Estado compartilhado da aplicação
 type AppState = Arc<Mutex<Vec<User>>>;
 
 #[tokio::main]
 async fn main() {
+    // Inicializa o estado com alguns usuários
     let users = vec![
         User {
             id: 1,
-            name: "Joe Doe".to_string(),
-            email: "joedoe@example.com".to_string(),
+            name: "Alice".to_string(),
+            email: "alice@example.com".to_string(),
         },
         User {
             id: 2,
-            name: "Alice Lice".to_string(),
-            email: "alli@example.com".to_string(),
+            name: "Bob".to_string(),
+            email: "bob@example.com".to_string(),
         },
     ];
 
+    let app_state = Arc::new(Mutex::new(users));
+
+    // Define as rotas
     let app = Router::new()
         .route("/", get(root))
         .route("/users", get(get_users).post(create_user))
-        .route("/user/:id", get(get_users).delete(delete_user))
+        .route("/users/:id", get(get_user).delete(delete_user))
         .with_state(app_state);
 
-    let addr = "127.0.0.1:3000";
-
+    // Inicia o servidor
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
         .unwrap();
@@ -65,6 +64,7 @@ async fn get_users(State(state): State<AppState>) -> Json<Vec<User>> {
     Json(users.clone())
 }
 
+// GET /users/:id - Busca um usuário específico
 async fn get_user(
     Path(id): Path<u32>,
     State(state): State<AppState>,
@@ -79,14 +79,41 @@ async fn get_user(
         .ok_or(StatusCode::NOT_FOUND)
 }
 
+// POST /users - Cria um novo usuário
 async fn create_user(
     State(state): State<AppState>,
     Json(payload): Json<CreateUserRequest>,
 ) -> (StatusCode, Json<User>) {
-  
-  
-    let new_id = User {
+    let mut users = state.lock().unwrap();
+
+    let new_id = users.iter().map(|u| u.id).max().unwrap_or(0) + 1;
+
+    let new_user = User {
         id: new_id,
-        name: payload.no,
+        name: payload.name,
+        email: payload.email,
     };
+
+    users.push(new_user.clone());
+
+    (StatusCode::CREATED, Json(new_user))
+}
+
+// DELETE /users/:id - Remove um usuário
+async fn delete_user(Path(id): Path<u32>, State(state): State<AppState>) -> StatusCode {
+    let mut users: std::sync::MutexGuard<'_, Vec<User>> = state.lock().unwrap();
+
+    if let Some(pos) = users.iter().position(|u| u.id == id) {
+        users.remove(pos);
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::NOT_FOUND
+    }
+}
+
+// Estrutura para criação de usuário
+#[derive(Deserialize)]
+struct CreateUserRequest {
+    name: String,
+    email: String,
 }
