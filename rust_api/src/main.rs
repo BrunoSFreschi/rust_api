@@ -7,7 +7,6 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
-// Estrutura de dados para um usuário
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct User {
     id: u32,
@@ -15,12 +14,10 @@ struct User {
     email: String,
 }
 
-// Estado compartilhado da aplicação
 type AppState = Arc<Mutex<Vec<User>>>;
 
 #[tokio::main]
 async fn main() {
-    // Inicializa o estado com alguns usuários
     let users = vec![
         User {
             id: 1,
@@ -36,14 +33,14 @@ async fn main() {
 
     let app_state = Arc::new(Mutex::new(users));
 
-    // Define as rotas
+    // rotas
     let app = Router::new()
         .route("/", get(root))
         .route("/users", get(get_users).post(create_user))
         .route("/users/:id", get(get_user).delete(delete_user))
         .with_state(app_state);
 
-    // Inicia o servidor
+    // server
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
         .unwrap();
@@ -53,18 +50,16 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-// Handler para rota raiz
+// root
 async fn root() -> &'static str {
     "API REST com Rust e Axum 🦀"
 }
 
-// GET /users - Lista todos os usuários
 async fn get_users(State(state): State<AppState>) -> Json<Vec<User>> {
     let users = state.lock().unwrap();
     Json(users.clone())
 }
 
-// GET /users/:id - Busca um usuário específico
 async fn get_user(
     Path(id): Path<u32>,
     State(state): State<AppState>,
@@ -79,7 +74,6 @@ async fn get_user(
         .ok_or(StatusCode::NOT_FOUND)
 }
 
-// POST /users - Cria um novo usuário
 async fn create_user(
     State(state): State<AppState>,
     Json(payload): Json<CreateUserRequest>,
@@ -99,7 +93,6 @@ async fn create_user(
     (StatusCode::CREATED, Json(new_user))
 }
 
-// DELETE /users/:id - Remove um usuário
 async fn delete_user(Path(id): Path<u32>, State(state): State<AppState>) -> StatusCode {
     let mut users: std::sync::MutexGuard<'_, Vec<User>> = state.lock().unwrap();
 
@@ -117,3 +110,4 @@ struct CreateUserRequest {
     name: String,
     email: String,
 }
+
